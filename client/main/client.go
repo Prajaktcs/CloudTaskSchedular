@@ -10,23 +10,57 @@ import (
 )
 
 type task struct {
-	id   int
-	task string
+	id       int
+	taskType int
+	task     string
 }
 
 /*
-	A blocking function to get the
+	Method to process the local queue. Will start threads
+	till the channel doesnt block
 */
-func process_channel(insert_channel chan *task, output_channel chan int) {
-	input := <-insert_channel.task // get the input from the channel
-	// for now, only supporting sleep tasks
-	if strings.HasPrefix(input, "sleep") {
-		value, _ := strconv.Atoi(strings.Split(input, " ")[1])
-		fmt.Println(value)
-		fmt.Println("Going to sleep")
-		//setting the time in milliseconds
-		time.Sleep(time.Millisecond)
-		fmt.Println("Out of sleep")
+func execute(taskChannel chan *task, signalChannel chan int, numberOfTasks int, outputChannel chan int) {
+	for i := 0; i < numberOfTasks; i++ {
+		taskInstance := <-taskChannel
+		// Sleep task is 1
+		if taskInstance.taskType == 1 {
+			task1 := strings.Split(taskInstance.task, " ")
+			multiplier, _ := strconv.Atoi(task1[1])
+			go sleep(multiplier, outputChannel, taskInstance.id)
+		}
+
+	}
+
+	signalChannel <- 1
+}
+
+func sleep(multiplier int, outputChannel chan int, taskId int) {
+	time.Sleep(time.Duration(multiplier) * time.Millisecond)
+	outputChannel <- taskId
+}
+
+/*
+	A blocking function to schedule the number of tasks
+*/
+func processChannel(insertChannel chan string, outputChannel chan int, numberOfTasks int) {
+	//Running the code till all the channel is processed
+	signalChannel := make(chan int, 1)
+	signalChannel <- 1
+	tasksQueue := make(chan *task, numberOfTasks)
+	counter := 0
+	for true {
+		// block till all the values are executed
+		flag := <-signalChannel
+		if flag == 1 {
+			for i := 0; i < numberOfTasks; i++ {
+				input := <-insertChannel // get the input from the channel
+				counter += 1
+				taskInstance := task{counter, 1, input}
+				tasksQueue <- &taskInstance
+
+			}
+			execute(tasksQueue, signalChannel, numberOfTasks, outputChannel)
+		}
 	}
 
 }
@@ -34,8 +68,8 @@ func process_channel(insert_channel chan *task, output_channel chan int) {
 /*
 	Add all the workload to the channel
 */
-func add_local_load(wordload_file string, insert_channel chan string) int {
-	file, _ := os.Open(wordload_file)
+func addLocalLoad(wordloadFile string, insertChannel chan string) int {
+	file, _ := os.Open(wordloadFile)
 	reader := bufio.NewReaderSize(file, 4*1024)
 	defer file.Close()
 	fmt.Println("Reached here")
@@ -43,7 +77,7 @@ func add_local_load(wordload_file string, insert_channel chan string) int {
 	count := 0
 	for err == nil && !isPrefix {
 		fmt.Println("Inserting line" + string(line))
-		insert_channel <- string(line) //Adding to the channel
+		insertChannel <- string(line) //Adding to the channel
 		line, isPrefix, err = reader.ReadLine()
 		count++
 	}
@@ -53,21 +87,34 @@ func add_local_load(wordload_file string, insert_channel chan string) int {
 /*
  Function to parse the command entered in the line
 */
-func process_command(command string) bool {
+func processCommand(command string) bool {
 	fmt.Println(command)
 	if strings.HasPrefix(command, "client") {
-		commands_slice := strings.Split(command, " ")
-		if strings.Compare(commands_slice[0], "client") == 0 {
-			if strings.Compare(commands_slice[1], "-s") == 0 || strings.Compare(commands_slice[3], "-s") == 0 {
-				if strings.Compare(commands_slice[1], "-s") == 0 {
-					if (strings.Compare(commands_slice[2], "LOCAL")) == 0 && (strings.Compare(commands_slice[3], "-t") == 0) && (strings.Compare(commands_slice[5], "-w") == 0) {
+		commandsSlice := strings.Split(command, " ")
+		if strings.Compare(commandsSlice[0], "client") == 0 {
+			if strings.Compare(commandsSlice[1], "-s") == 0 || strings.Compare(commandsSlice[3], "-s") == 0 {
+				if strings.Compare(commandsSlice[1], "-s") == 0 {
+					if (strings.Compare(commandsSlice[2], "LOCAL")) == 0 && (strings.Compare(commandsSlice[3], "-t") == 0) && (strings.Compare(commandsSlice[5], "-w") == 0) {
 						//Pass the workload file
-						a, _ := strconv.Atoi(commands_slice[4])
-						insert_channel := make(chan string, a)
-						output_channel := make(chan int)
-						go add_local_load(commands_slice[6], insert_channel)
 
-						go process_channel(insert_channel, output_channel)
+						a, _ := strconv.Atoi(commandsSlice[4])
+						insertChannel := make(chan string, 1000)
+						outputChannel := make(chan int, 1000)
+						count := addLocalLoad(commandsSlice[6], insertChannel)
+						start := time.Now()
+						go processChannel(insertChannel, outputChannel, a)
+						fmt.Println(count)
+						for i := 0; i < count; i++ {
+							//THis will block till we dont get all the ids
+							select {
+							case <-outputChannel:
+								fmt.Print()
+							case <-time.After(time.Second * 3):
+								fmt.Println("timeout 2")
+							}
+						}
+						end := time.Since(start).String()
+						fmt.Println(end)
 					}
 				}
 			}
@@ -88,7 +135,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	for true {
 		command, _, _ := reader.ReadLine()
-		if process_command(string(command)) {
+		if processCommand(string(command)) {
 			fmt.Println("Nice progress")
 		} else {
 			break
