@@ -68,20 +68,48 @@ func processChannel(insertChannel chan string, outputChannel chan int, numberOfT
 /*
 	Add all the workload to the channel
 */
-func addLocalLoad(wordloadFile string, insertChannel chan string) int {
-	file, _ := os.Open(wordloadFile)
+func addLocalLoad(workloadFile string, insertChannel chan string) int {
+	file, _ := os.Open(workloadFile)
 	reader := bufio.NewReaderSize(file, 4*1024)
 	defer file.Close()
 	fmt.Println("Reached here")
 	line, isPrefix, err := reader.ReadLine()
 	count := 0
 	for err == nil && !isPrefix {
-		fmt.Println("Inserting line" + string(line))
 		insertChannel <- string(line) //Adding to the channel
 		line, isPrefix, err = reader.ReadLine()
 		count++
 	}
 	return count
+}
+
+/**
+function to read file, and initialize queue and dynamodb
+*/
+func processRemoteQueue(queueName string, workloadFile string) {
+	tasksList := make([]string, 0)
+	file, _ := os.Open(workloadFile)
+	reader := bufio.NewReaderSize(file, 4*1024)
+	defer file.Close()
+	fmt.Println("Reached here")
+	line, isPrefix, err := reader.ReadLine()
+	count := 0
+	for err == nil && !isPrefix {
+		tasksList = append(tasksList, string(line))
+		fmt.Println("While reading: " + string(line))
+		line, isPrefix, err = reader.ReadLine()
+		count++
+	}
+	//Create the queue
+	createQueue(queueName)
+	//Here create dynamodb table
+	start := time.Now()
+	for _, element := range tasksList {
+		result := sendMessage(element)
+		fmt.Println(result)
+	}
+	end := time.Since(start).String()
+	fmt.Println(end)
 }
 
 /*
@@ -96,7 +124,6 @@ func processCommand(command string) bool {
 				if strings.Compare(commandsSlice[1], "-s") == 0 {
 					if (strings.Compare(commandsSlice[2], "LOCAL")) == 0 && (strings.Compare(commandsSlice[3], "-t") == 0) && (strings.Compare(commandsSlice[5], "-w") == 0) {
 						//Pass the workload file
-
 						a, _ := strconv.Atoi(commandsSlice[4])
 						insertChannel := make(chan string, 1000)
 						outputChannel := make(chan int, 1000)
@@ -115,6 +142,8 @@ func processCommand(command string) bool {
 						}
 						end := time.Since(start).String()
 						fmt.Println(end)
+					} else {
+						processRemoteQueue(commandsSlice[2], commandsSlice[4])
 					}
 				}
 			}
