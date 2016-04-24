@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -86,7 +87,7 @@ func addLocalLoad(workloadFile string, insertChannel chan string) int {
 /**
 function to read file, and initialize queue and dynamodb
 */
-func processRemoteQueue(queueName string, workloadFile string) {
+func processRemoteQueue(queueName string, workloadFile string, outputQueueUrl string) {
 	tasksList := make([]string, 0)
 	file, _ := os.Open(workloadFile)
 	reader := bufio.NewReaderSize(file, 4*1024)
@@ -96,17 +97,28 @@ func processRemoteQueue(queueName string, workloadFile string) {
 	count := 0
 	for err == nil && !isPrefix {
 		tasksList = append(tasksList, string(line))
-		fmt.Println("While reading: " + string(line))
 		line, isPrefix, err = reader.ReadLine()
 		count++
 	}
 	//Create the queue
 	createQueue(queueName)
 	//Here create dynamodb table
+	createTable(queueName)
 	start := time.Now()
-	for _, element := range tasksList {
-		result := sendMessage(element)
-		fmt.Println(result)
+	count = 0
+	for index, element := range tasksList {
+		key := strconv.Itoa(index)
+		sendMessage(key + " " + element)
+		count = index
+	}
+	//now waiting till we get all the messages on the output queue
+	i := 0
+	for i <= count {
+		isSucccessful, _ := receiveMessage(outputQueueUrl)
+		if isSucccessful == true {
+			i++
+			fmt.Println("Received output")
+		}
 	}
 	end := time.Since(start).String()
 	fmt.Println(end)
@@ -115,7 +127,7 @@ func processRemoteQueue(queueName string, workloadFile string) {
 /*
  Function to parse the command entered in the line
 */
-func processCommand(command string) bool {
+func processCommand(command string, outputQueueUrl string) bool {
 	fmt.Println(command)
 	if strings.HasPrefix(command, "client") {
 		commandsSlice := strings.Split(command, " ")
@@ -143,7 +155,7 @@ func processCommand(command string) bool {
 						end := time.Since(start).String()
 						fmt.Println(end)
 					} else {
-						processRemoteQueue(commandsSlice[2], commandsSlice[4])
+						processRemoteQueue(commandsSlice[2], commandsSlice[4], outputQueueUrl)
 					}
 				}
 			}
@@ -162,9 +174,10 @@ func main() {
 		run the client till user does not hit q
 	*/
 	reader := bufio.NewReader(os.Stdin)
+	outputQueueUrl := flag.String("url", "", "Url of the output queue")
 	for true {
 		command, _, _ := reader.ReadLine()
-		if processCommand(string(command)) {
+		if processCommand(string(command), *outputQueueUrl) {
 			fmt.Println("Nice progress")
 		} else {
 			break

@@ -19,7 +19,11 @@ func initialize(queueName string) {
 	params := &sqs.GetQueueUrlInput{
 		QueueName: aws.String(queueName),
 	}
-	resp, _ := svc.GetQueueUrl(params)
+	resp, err := svc.GetQueueUrl(params)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 	queueUrl = *resp.QueueUrl
 }
 
@@ -37,6 +41,10 @@ func receiveMessage() (bool, string) {
 		return false, ""
 	}
 	//fetching one message per call
+	if len(resp.Messages) == 0 {
+		fmt.Println("Empty Queue")
+		return false, ""
+	}
 	message := *resp.Messages[0].Body
 	receiptHandle := *resp.Messages[0].ReceiptHandle
 	paramsDelete := &sqs.DeleteMessageInput{
@@ -49,4 +57,22 @@ func receiveMessage() (bool, string) {
 		return false, ""
 	}
 	return true, message
+}
+
+/**
+function to send message to the specified queue
+*/
+func sendMessage(outputQueueUrl string) bool {
+	params := &sqs.SendMessageInput{
+		MessageBody:  aws.String("1"),
+		QueueUrl:     aws.String(outputQueueUrl),
+		DelaySeconds: aws.Int64(1),
+	}
+	_, err := svc.SendMessage(params)
+	if err != nil {
+		fmt.Println(err.Error())
+		return false
+	}
+	//fmt.Println(resp)
+	return true
 }
