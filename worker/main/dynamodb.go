@@ -29,6 +29,26 @@ func checkItem(tableName string, id string) bool {
 	return true
 }
 
+func getItem(tableName string, id string) string{
+	params := &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"id": {
+				S: aws.String(id),
+			},
+		},
+	}
+	resp, err := dynoClient.GetItem(params)
+	if err != nil {
+		fmt.Println(err.Error())
+		return ""
+	}
+	if len(resp.Item) == 0 {
+		return ""
+	}
+	return *resp.Item["value"].S
+}
+
 func writeItem(tableName string, id string, value string) bool {
 	params := &dynamodb.PutItemInput{
 		TableName: aws.String(tableName),

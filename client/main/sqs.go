@@ -19,7 +19,7 @@ func createQueue(queueName string) string {
 	}
 	_, err := svc.CreateQueue(paramsCreate)
 	if err != nil {
-		//fmt.Println(err.Error())
+		fmt.Println(err.Error())
 		return ""
 	}
 	params := &sqs.GetQueueUrlInput{
@@ -75,7 +75,7 @@ func receiveMessage(outputQueueUrl string) (bool, string) {
 	resp, err := svc.ReceiveMessage(params)
 
 	if err != nil {
-		//fmt.Println(err.Error())
+		fmt.Println(err.Error())
 		return false, ""
 	}
 	//fetching one message per call
@@ -91,7 +91,7 @@ func receiveMessage(outputQueueUrl string) (bool, string) {
 	}
 	_, e := svc.DeleteMessage(paramsDelete)
 	if e != nil {
-		//fmt.Println(e.Error())
+		fmt.Println(e.Error())
 		return false, ""
 	}
 	return true, message

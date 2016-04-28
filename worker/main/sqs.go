@@ -42,7 +42,6 @@ func receiveMessage() (bool, string) {
 	}
 	//fetching one message per call
 	if len(resp.Messages) == 0 {
-		fmt.Println("Empty Queue")
 		return false, ""
 	}
 	message := *resp.Messages[0].Body
